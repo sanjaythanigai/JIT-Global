@@ -1,0 +1,1 @@
+ffmpeg -i "C:\video processing\SampleVideo_1280x720_10mb.mp4" -ss 10 -to 20 -c:v libx264 -preset fast -crf 23 -c:a aac -strict experimental "C:\video processing\output.mp4"

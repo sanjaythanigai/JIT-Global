@@ -1,0 +1,85 @@
+import boto3
+import datetime
+
+def get_daily_cost(access_key, secret_key):
+    """
+    Fetch daily cost data excluding Tax & Support costs using specific AWS access keys.
+    """
+    client = boto3.client(
+        'ce',
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key
+    )
+
+    today = datetime.date.today()
+    start_of_last_month = (today.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
+    end_of_last_month = today.replace(day=1) - datetime.timedelta(days=1)
+
+    # Fetch last month's cost details
+    response = client.get_cost_and_usage(
+        TimePeriod={
+            'Start': start_of_last_month.isoformat(),
+            'End': end_of_last_month.isoformat()
+        },
+        Granularity='MONTHLY',
+        Metrics=['UnblendedCost'],
+        Filter={
+            "Not": {"Dimensions": {"Key": "SERVICE", "Values": ["Tax", "Support"]}}
+        }
+    )
+
+    last_month_total_cost = float(response['ResultsByTime'][0]['Total']['UnblendedCost']['Amount'])
+    total_days_last_month = (end_of_last_month - start_of_last_month).days + 1
+    daily_average = last_month_total_cost / total_days_last_month
+
+    # Fetch daily costs for current month
+    response = client.get_cost_and_usage(
+        TimePeriod={
+            'Start': today.replace(day=1).isoformat(),
+            'End': today.isoformat()
+        },
+        Granularity='DAILY',
+        Metrics=['UnblendedCost'],
+        Filter={
+            "Not": {"Dimensions": {"Key": "SERVICE", "Values": ["Tax", "Support"]}}
+        }
+    )
+
+    daily_costs = []
+    cumulative_cost = 0  # Track cumulative cost
+    for result in response['ResultsByTime']:
+        date = result['TimePeriod']['Start']
+        cost = float(result['Total']['UnblendedCost']['Amount'])
+        cumulative_cost += cost  # Add to cumulative total
+        daily_costs.append((date, cost, cumulative_cost))
+
+    return daily_costs, daily_average
+
+def compare_and_display(account_name, daily_costs, daily_average):
+    """
+    Display cumulative daily AWS costs, compare with the daily average, and indicate if it exceeds buffer.
+    """
+    buffer_limit = daily_average * 1.1  # 10% buffer
+    print(f"\nDaily AWS Costs for Account: {account_name}")
+    print(f"Average Daily Cost: ${daily_average:.2f}, Buffer Limit: ${buffer_limit:.2f}\n")
+    print(f"{'Date':<12}{'Daily Cost':<15}{'Cumulative Cost':<20}{'Exceeded Buffer'}")
+
+    for date, cost, cumulative_cost in daily_costs:
+        exceeded_buffer = cost > buffer_limit
+        buffer_status = "Yes" if exceeded_buffer else "No"
+
+        # Print the result without colored formatting
+        print(f"{date:<12}${cost:<14.2f}${cumulative_cost:<19.2f}{buffer_status}")
+
+if _name_ == "_main_":
+    accounts = [
+           
+    ]
+
+    for account in accounts:
+        try:
+            print(f"\nFetching data for account: {account['name']}...\n")
+            daily_costs, daily_average = get_daily_cost(account['access_key'], account['secret_key'])
+            compare_and_display(account['name'], daily_costs, daily_average)
+        except Exception as e:
+            print(f"Error fetching data for account {account['name']}: {str(e)}")
